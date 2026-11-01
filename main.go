@@ -1,21 +1,38 @@
 package main
 
 import (
-	"blog-aggregator/internal/config"
 	"fmt"
 	"os"
+	"database/sql"
+	"time"
+	"context"
+
+	"blog-aggregator/internal/config"
+	"blog-aggregator/internal/database"
+	"github.com/google/uuid"
+	_ "github.com/lib/pq"
 )
 
 func main() {
-	configFile, err := config.Read()
+	configStruct, err := config.Read()
 	if err != nil {
 		return
 	}
-	s := state { cfg: &configFile }
+	// load database URL
+	db, err := sql.Open("postgres", configStruct.DBURL)
+	// create database queries
+	dbQueries := database.New(db)
+
+	// store config struct and db queries
+	s := state { 
+		cfg: &configStruct,
+		db: dbQueries,
+	}
 	cmds := commands { commandsMap: make(map[string]func(*state, command) error) }	// initialize map of handler functions within the new instance
 
-	// register login handler
+	// register handlers
 	cmds.register("login", handlerLogin)
+	cmds.register("register", handlerRegister)
 
 	// get command line args
 	args := os.Args
@@ -38,12 +55,11 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-
-	fmt.Println(config.Read())
 }
 
 type state struct {
 	cfg *config.Config
+	db *database.Queries
 }
 
 type command struct {
@@ -63,9 +79,53 @@ func handlerLogin(s *state, cmd command) error {
 	}
 
 	username := cmd.arguments[0]
+	
+	// Check if username exists
+	_, err := s.db.GetUser(context.Background(), username)
+	if err != nil {
+		return fmt.Errorf("user does not exist")
+	}
+
+	// Login
 	s.cfg.SetUser(username)
 
 	fmt.Println("username has been set")
+	return nil
+}
+
+func handlerRegister(s *state, cmd command) error {
+	// register expects one argument: username
+	if len(cmd.arguments) == 0 {
+		return fmt.Errorf("register command expects one argument")
+	}
+
+	username := cmd.arguments[0]
+
+	// Check if user already exists
+	_, err := s.db.GetUser(context.Background(), username)
+	if err == nil {
+		return fmt.Errorf("this user already exists")
+	}
+
+	user, err := s.db.CreateUser(context.Background(), database.CreateUserParams{
+		ID: uuid.New(), 
+		CreatedAt: time.Now(), 
+		UpdatedAt: time.Now(), 
+		Name: username,
+	})
+	if err != nil {
+		return err
+	}
+	
+	// Login
+	err = s.cfg.SetUser(username)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("user created")
+	fmt.Println(user)
+	
 	return nil
 }
 
