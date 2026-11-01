@@ -33,6 +33,7 @@ func main() {
 	// register handlers
 	cmds.register("login", handlerLogin)
 	cmds.register("register", handlerRegister)
+	cmds.register("reset", handlerReset)
 
 	// get command line args
 	args := os.Args
@@ -74,7 +75,7 @@ type commands struct {
 
 func handlerLogin(s *state, cmd command) error {
 	// login expects one argument: username
-	if len(cmd.arguments) == 0 {
+	if len(cmd.arguments) != 1 {
 		return fmt.Errorf("login command expects one argument")
 	}
 
@@ -95,8 +96,8 @@ func handlerLogin(s *state, cmd command) error {
 
 func handlerRegister(s *state, cmd command) error {
 	// register expects one argument: username
-	if len(cmd.arguments) == 0 {
-		return fmt.Errorf("register command expects one argument")
+	if len(cmd.arguments) != 1 {
+		return fmt.Errorf("register command expects one argument.")
 	}
 
 	username := cmd.arguments[0]
@@ -107,7 +108,7 @@ func handlerRegister(s *state, cmd command) error {
 		return fmt.Errorf("this user already exists")
 	}
 
-	user, err := s.db.CreateUser(context.Background(), database.CreateUserParams{
+	_, err = s.db.CreateUser(context.Background(), database.CreateUserParams{
 		ID: uuid.New(), 
 		CreatedAt: time.Now(), 
 		UpdatedAt: time.Now(), 
@@ -123,9 +124,20 @@ func handlerRegister(s *state, cmd command) error {
 		return err
 	}
 
-	fmt.Println("user created")
-	fmt.Println(user)
-	
+	fmt.Println("user created")	
+	return nil
+}
+
+func handlerReset(s *state, cmd command) error {
+	if len(cmd.arguments) > 0 {
+		return fmt.Errorf("reset command expects zero arguments")
+	}
+
+	err := s.db.Reset(context.Background())
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
