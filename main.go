@@ -34,6 +34,7 @@ func main() {
 	cmds.register("login", handlerLogin)
 	cmds.register("register", handlerRegister)
 	cmds.register("reset", handlerReset)
+	cmds.register("users", handlerGetUsers)
 
 	// get command line args
 	args := os.Args
@@ -136,6 +137,27 @@ func handlerReset(s *state, cmd command) error {
 	err := s.db.Reset(context.Background())
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func handlerGetUsers(s *state, cmd command) error {
+	if len(cmd.arguments) > 0 {
+		return fmt.Errorf("users command expects zero arguments")
+	}
+
+	users, err := s.db.GetUsers(context.Background())
+	if err != nil {
+		return err
+	}
+
+	for _, user := range users {
+		if user.Name == s.cfg.CurrentUserName {
+			fmt.Printf("* %s (current) \n", user.Name)
+		} else {
+			fmt.Printf("* %s \n", user.Name)
+		}
 	}
 
 	return nil
