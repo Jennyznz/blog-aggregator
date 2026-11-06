@@ -6,6 +6,10 @@ import (
 	"database/sql"
 	"time"
 	"context"
+	"encoding/xml"
+	"net/http"
+	"html"
+	"io"
 
 	"blog-aggregator/internal/config"
 	"blog-aggregator/internal/database"
@@ -35,6 +39,7 @@ func main() {
 	cmds.register("register", handlerRegister)
 	cmds.register("reset", handlerReset)
 	cmds.register("users", handlerGetUsers)
+	cmds.register("agg", handlerAgg)
 
 	// get command line args
 	args := os.Args
@@ -179,4 +184,68 @@ func (c *commands) run(s *state, cmd command) error {
 
 func (c *commands) register(name string, f func(*state, command) error) {
 	c.commandsMap[name] = f
+}
+
+type RSSFeed struct {
+	Channel struct {
+		Title string `xml:"title"`
+		Link string `xml:"link"`
+		Description string `xml:"description"`
+		Item []RSSItem `xml:"item"`
+	} `xml:"channel"`
+}
+
+type RSSItem struct {
+	Title string `xml:"title"`
+	Link string `xml:"link"`
+	Description string `xml:"description"`
+	PubDate string `xml:"pubDate"`
+}
+
+func fetchFeed (ctx context.Context, feedURL string) (*RSSFeed, error) {
+	// Construct request
+	req, err := http.NewRequestWithContext(ctx, "GET", feedURL, nil)
+	if err != nil {
+		return &RSSFeed{}, fmt.Errorf("error building request")
+	}
+	req.Header.Set("User-Agent", "gator")
+
+	// Send request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return &RSSFeed{}, fmt.Errorf("error sending request")
+	}
+
+	// Process response
+	content, err := io.ReadAll(resp.Body)
+	if err != nil{ 
+		return &RSSFeed{}, fmt.Errorf("error reading response stream")
+	}
+	result := &RSSFeed{}
+	err = xml.Unmarshal(content, result)
+	if err != nil {
+		return &RSSFeed{}, fmt.Errorf("error unmarshalling XML")
+	}
+
+	// Decode escaped HTML entities
+	result.Channel.Title = html.UnescapeString(result.Channel.Title)
+	result.Channel.Description = html.UnescapeString(result.Channel.Description)
+	items := result.Channel.Item
+	for i, _ := range(items) {
+		items[i].Title = html.UnescapeString(items[i].Title)
+		items[i].Description = html.UnescapeString(items[i].Description)
+	}
+ 
+	return result, nil
+}
+
+func handlerAgg (s *state, cmd command) error {
+	result, err := fetchFeed(context.Background(), "https://www.wagslane.dev/index.xml")
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(result)
+	return nil
 }
