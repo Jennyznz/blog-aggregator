@@ -40,6 +40,7 @@ func main() {
 	cmds.register("reset", handlerReset)
 	cmds.register("users", handlerGetUsers)
 	cmds.register("agg", handlerAgg)
+	cmds.register("addfeed", handlerAddFeed)
 
 	// get command line args
 	args := os.Args
@@ -247,5 +248,38 @@ func handlerAgg (s *state, cmd command) error {
 	}
 
 	fmt.Println(result)
+	return nil
+}
+
+func handlerAddFeed(s *state, cmd command) error {
+	if len(cmd.arguments) != 2 {
+		fmt.Errorf("addfeed command expects 2 arguments")
+	}
+
+	// Extract feed name and url
+	feedName := cmd.arguments[0]
+	feedUrl := cmd.arguments[1]
+
+	// Get current user
+	currentUsername := s.cfg.CurrentUserName
+	currentUser, err := s.db.GetUser(context.Background(), currentUsername)
+	if err != nil {
+		return err
+	}
+
+	// Create feed and connect to current user's ID
+	feed, err := s.db.CreateFeed(context.Background(), database.CreateFeedParams{
+		ID: uuid.New(),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Name: feedName,
+		Url: feedUrl,
+		UserID: currentUser.ID,
+	})
+	if err != nil {
+		return err
+	}
+	
+	fmt.Println(feed)
 	return nil
 }
