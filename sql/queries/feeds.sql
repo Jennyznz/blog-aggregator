@@ -14,4 +14,4 @@ RETURNING *;
 SELECT name, url, user_id FROM feeds;
 
 -- name: GetFeedFromUrl :one
-SELECT * FROM feeds WHERE id = $1;
+SELECT * FROM feeds WHERE url = $1;
