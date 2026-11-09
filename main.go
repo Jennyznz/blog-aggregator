@@ -208,6 +208,7 @@ type RSSItem struct {
 }
 
 func fetchFeed (ctx context.Context, feedURL string) (*RSSFeed, error) {
+
 	// Construct request
 	req, err := http.NewRequestWithContext(ctx, "GET", feedURL, nil)
 	if err != nil {
@@ -246,12 +247,55 @@ func fetchFeed (ctx context.Context, feedURL string) (*RSSFeed, error) {
 }
 
 func handlerAgg (s *state, cmd command) error {
-	result, err := fetchFeed(context.Background(), "https://www.wagslane.dev/index.xml")
+	if len(cmd.arguments) != 1 {
+		return fmt.Errorf("agg command expects 1 argument")
+	}
+
+	// Extract and parse the provided  time between requests
+	duration := cmd.arguments[0]
+	fmt.Printf("Collecting feeds every %s\n", duration)
+	parsedDuration, err := time.ParseDuration(duration)
+	if err != nil {
+		return err
+	}
+
+	ticker := time.NewTicker(parsedDuration)
+	for ; ; <-ticker.C {
+		aggregation(s)
+	}
+
+	result, err := fetchFeed(context.Background(), "https://news.ycombinator.com/rss")
 	if err != nil {
 		return err
 	}
 
 	fmt.Println(result)
+	return nil
+}
+
+func aggregation(s *state) error {
+
+	// Get next feed and mark as fetched
+	nextFeed, err := s.db.GetNextFeedToFetch(context.Background())
+	if err != nil {
+		return err
+	}
+
+	err = s.db.MarkFeedFetched(context.Background(), nextFeed.ID)
+	if err != nil {
+		return err
+	}
+
+	// Fetch feed
+	result, err := fetchFeed(context.Background(), nextFeed.Url)
+	if err != nil {
+		return err
+	}
+
+	for _, item := range result.Channel.Item {
+		fmt.Println(item.Title)
+	}
+
 	return nil
 }
 
