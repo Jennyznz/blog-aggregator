@@ -10,11 +10,12 @@ import (
 	"net/http"
 	"html"
 	"io"
+	"errors"
 
 	"blog-aggregator/internal/config"
 	"blog-aggregator/internal/database"
 	"github.com/google/uuid"
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 )
 
 func main() {
@@ -261,7 +262,10 @@ func handlerAgg (s *state, cmd command) error {
 
 	ticker := time.NewTicker(parsedDuration)
 	for ; ; <-ticker.C {
-		aggregation(s)
+		err := aggregation(s)
+		if err != nil {
+			fmt.Println("aggregation error:", err)
+		}
 	}
 
 	result, err := fetchFeed(context.Background(), "https://news.ycombinator.com/rss")
@@ -274,7 +278,6 @@ func handlerAgg (s *state, cmd command) error {
 }
 
 func aggregation(s *state) error {
-
 	// Get next feed and mark as fetched
 	nextFeed, err := s.db.GetNextFeedToFetch(context.Background())
 	if err != nil {
@@ -286,16 +289,51 @@ func aggregation(s *state) error {
 		return err
 	}
 
-	// Fetch feed
+	// Fetch next feed 
 	result, err := fetchFeed(context.Background(), nextFeed.Url)
 	if err != nil {
 		return err
 	}
 
-	for _, item := range result.Channel.Item {
-		fmt.Println(item.Title)
+	// Get feed info from database
+	feed, err := s.db.GetFeedFromUrl(context.Background(), nextFeed.Url)
+	if err != nil {
+		return err
 	}
 
+	// Save posts on feed to database
+	for _, item := range result.Channel.Item {
+		// Handle different formats for published_at. Fall back to time.Now() if parsing fails
+		publishedAt, err := time.Parse(time.RFC1123Z, item.PubDate)
+		if err != nil {
+			publishedAt = time.Now()
+		}
+	
+		post, err := s.db.CreatePost(context.Background(), database.CreatePostParams{
+			ID: uuid.New(),
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+			Title: item.Title,
+			Url: item.Link,
+			Description: item.Description,
+			PublishedAt: publishedAt,
+			FeedID: feed.ID,
+		})
+		if err != nil {
+			// Ignore 'URL exists' errors 
+			var pqErr *pq.Error
+			if errors.As(err, &pqErr) && pqErr.Code == "23505" { // unwrap err into a *pq.Error and check against PGSQL code for unique violation
+				// ignore
+				continue
+			} else {
+				// log all other errors
+				return err
+			}
+		}
+
+		fmt.Println("Post saved to database")
+		fmt.Println(post)
+	}
 	return nil
 }
 
