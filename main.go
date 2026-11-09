@@ -40,10 +40,10 @@ func main() {
 	cmds.register("reset", handlerReset)
 	cmds.register("users", handlerGetUsers)
 	cmds.register("agg", handlerAgg)
-	cmds.register("addfeed", handlerAddFeed)
+	cmds.register("addfeed", middlewareLoggedIn(handlerAddFeed))
 	cmds.register("feeds", handlerFeeds)
-	cmds.register("follow", handlerFollow)
-	cmds.register("following", handlerFollowing)
+	cmds.register("follow", middlewareLoggedIn(handlerFollow))
+	cmds.register("following", middlewareLoggedIn(handlerFollowing))
 
 	// get command line args
 	args := os.Args
@@ -254,7 +254,7 @@ func handlerAgg (s *state, cmd command) error {
 	return nil
 }
 
-func handlerAddFeed(s *state, cmd command) error {
+func handlerAddFeed(s *state, cmd command, user database.User) error {
 	if len(cmd.arguments) != 2 {
 		fmt.Errorf("addfeed command expects 2 arguments")
 	}
@@ -263,13 +263,6 @@ func handlerAddFeed(s *state, cmd command) error {
 	feedName := cmd.arguments[0]
 	feedUrl := cmd.arguments[1]
 
-	// Get current user
-	currentUsername := s.cfg.CurrentUserName
-	currentUser, err := s.db.GetUser(context.Background(), currentUsername)
-	if err != nil {
-		return err
-	}
-
 	// Create feed and connect to current user's ID
 	feed, err := s.db.CreateFeed(context.Background(), database.CreateFeedParams{
 		ID: uuid.New(),
@@ -277,18 +270,18 @@ func handlerAddFeed(s *state, cmd command) error {
 		UpdatedAt: time.Now(),
 		Name: feedName,
 		Url: feedUrl,
-		UserID: currentUser.ID,
+		UserID: user.ID,
 	})
 	if err != nil {
 		return err
 	}
 
 	// Add entry to feed_follows database
-	_, err := s.db.CreateFeedFollow(context.Background(), database.CreateFeedFollowParams{
+	_, err = s.db.CreateFeedFollow(context.Background(), database.CreateFeedFollowParams{
 		ID: uuid.New(),
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
-		UserID: currentUser.ID,
+		UserID: user.ID,
 		FeedID: feed.ID,
 	})
 	if err != nil {
@@ -322,17 +315,12 @@ func handlerFeeds(s *state, cmd command) error {
 	return nil
 }
 
-func handlerFollow(s *state, cmd command) error {
+func handlerFollow(s *state, cmd command, user database.User) error {
 	if len(cmd.arguments) != 1 {
 		return fmt.Errorf("follow command expects 1 argument")
 	}
 
-	// Get current user's name and ID
-	currentUsername := s.cfg.CurrentUserName
-	user, err := s.db.GetUser(context.Background(), currentUsername)
-	if err != nil {
-		return err
-	}
+	// Get current user's ID
 	currentUserID := user.ID
 
 	// Get id of feed at provided URL
@@ -355,20 +343,14 @@ func handlerFollow(s *state, cmd command) error {
 		return err
 	}
 
-	fmt.Println(feed.Name, currentUsername)
+	fmt.Println(feed.Name, user.Name)
 
 	return nil
 }
 
-func handlerFollowing(s *state, cmd command) error {
+func handlerFollowing(s *state, cmd command, user database.User) error {
 	if len(cmd.arguments) > 0 {
 		return fmt.Errorf("following command expects 0 arguments")
-	}
-
-	// Get ID of current user
-	user, err := s.db.GetUser(context.Background(), s.cfg.CurrentUserName)
-	if err != nil {
-		return err
 	}
 
 	// Fetch feed follows for current user
@@ -382,4 +364,15 @@ func handlerFollowing(s *state, cmd command) error {
 	}
 
 	return nil
+}
+
+func middlewareLoggedIn(handler func(s *state, cmd command, user database.User) error) func(s *state, cmd command) error {
+	return func(s *state, cmd command) error {
+		user, err := s.db.GetUser(context.Background(), s.cfg.CurrentUserName)
+		if err != nil {
+			return err
+		}
+		handler(s, cmd, user)
+		return nil
+	}
 }
