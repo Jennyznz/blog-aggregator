@@ -282,6 +282,18 @@ func handlerAddFeed(s *state, cmd command) error {
 	if err != nil {
 		return err
 	}
+
+	// Add entry to feed_follows database
+	_, err := s.db.CreateFeedFollow(context.Background(), database.CreateFeedFollowParams{
+		ID: uuid.New(),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		UserID: currentUser.ID,
+		FeedID: feed.ID,
+	})
+	if err != nil {
+		return err
+	}
 	
 	fmt.Println(feed)
 	return nil
@@ -359,6 +371,7 @@ func handlerFollowing(s *state, cmd command) error {
 		return err
 	}
 
+	// Fetch feed follows for current user
 	feedFollows, err := s.db.GetFeedFollowsForUser(context.Background(), user.ID)
 	if err != nil {
 		return err
