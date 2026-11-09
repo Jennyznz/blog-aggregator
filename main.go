@@ -42,6 +42,7 @@ func main() {
 	cmds.register("agg", handlerAgg)
 	cmds.register("addfeed", handlerAddFeed)
 	cmds.register("feeds", handlerFeeds)
+	cmds.register("follow", handlerFollow)
 
 	// get command line args
 	args := os.Args
@@ -306,4 +307,35 @@ func handlerFeeds(s *state, cmd command) error {
 	}
 
 	return nil
+}
+
+func handlerFollow(s *state, cmd command) error {
+	if len(cmd.arguments) != 1 {
+		return fmt.Errorf("follow command expects 1 argument")
+	}
+
+	// Get current user's name and ID
+	currentUsername := s.cfg.CurrentUserName
+	user, err := s.db.GetUser(currentUsername)
+	if err != nil {
+		return err
+	}
+	currentUserID := user.ID
+
+	// Get id of feed at provided URL
+	url := cmd.arguments[0]
+	feed, err := s.db.GetFeedFromUrl(context.Background(), url)
+	if err != nil {
+		return err
+	}
+	feedID := feed.ID
+
+	// Create a new feed follow record for current user
+	s.db.CreateFeedFollow(context.Background(), database.CreateFeedFollowParams{
+		ID: uuid.New(),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		UserID: currentUserID,
+		FeedID: feedID,
+	})
 }
