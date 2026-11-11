@@ -11,6 +11,7 @@ import (
 	"html"
 	"io"
 	"errors"
+	"strconv"
 
 	"blog-aggregator/internal/config"
 	"blog-aggregator/internal/database"
@@ -46,6 +47,7 @@ func main() {
 	cmds.register("follow", middlewareLoggedIn(handlerFollow))
 	cmds.register("following", middlewareLoggedIn(handlerFollowing))
 	cmds.register("unfollow", middlewareLoggedIn(handlerUnfollow))
+	cmds.register("browse", middlewareLoggedIn(handlerBrowse))
 
 	// get command line args
 	args := os.Args
@@ -182,7 +184,7 @@ func (c *commands) run(s *state, cmd command) error {
 			return err
 		}
 	} else {
-		fmt.Errorf("command not found")
+		return fmt.Errorf("command not found")
 	}
 
 	return nil
@@ -339,7 +341,7 @@ func aggregation(s *state) error {
 
 func handlerAddFeed(s *state, cmd command, user database.User) error {
 	if len(cmd.arguments) != 2 {
-		fmt.Errorf("addfeed command expects 2 arguments")
+		return fmt.Errorf("addfeed command expects 2 arguments")
 	}
 
 	// Extract feed name and url
@@ -377,7 +379,7 @@ func handlerAddFeed(s *state, cmd command, user database.User) error {
 
 func handlerFeeds(s *state, cmd command) error {
 	if len(cmd.arguments) > 0 {
-		fmt.Errorf("feed command expects 0 arguments")
+		return fmt.Errorf("feeds command expects 0 arguments")
 	}
 
 	feeds, err := s.db.GetFeeds(context.Background())
@@ -422,6 +424,8 @@ func handlerFollow(s *state, cmd command, user database.User) error {
 		UserID: currentUserID,
 		FeedID: feedID,
 	})
+	// Will return an error if user is already following that feed
+	
 	if err != nil {
 		return err
 	}
@@ -458,7 +462,10 @@ func middlewareLoggedIn(handler func(s *state, cmd command, user database.User) 
 		}
 
 		// Call function with user
-		handler(s, cmd, user)
+		err = handler(s, cmd, user)
+		if err != nil {
+			return err
+		}
 
 		return nil
 	}
@@ -481,6 +488,41 @@ func handlerUnfollow(s *state, cmd command, user database.User) error {
 	})
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func handlerBrowse(s *state, cmd command, user database.User) error {
+	if len(cmd.arguments) > 1 {
+		return fmt.Errorf("browse command expects 0 or 1 arguments")
+	}
+
+	// Get post limit, or default to 2
+	limit := "2"
+	if len(cmd.arguments) == 1 {
+		limit = cmd.arguments[0]
+	}
+
+	// Convert limit to int32
+	intLimit, err := strconv.Atoi(limit)
+	if err != nil {
+		return err
+	}
+	int32Limit := int32(intLimit)
+
+	// Get current user's posts from database
+	posts, err := s.db.GetPostsForUser(context.Background(), database.GetPostsForUserParams{
+							UserID: user.ID,
+							Limit: int32Limit,
+						})
+	if err != nil {
+		return err
+	}
+
+	// Print posts to console
+	for _, post := range posts {
+		fmt.Println(post)
 	}
 
 	return nil
