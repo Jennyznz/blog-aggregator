@@ -54,7 +54,7 @@ func (cfg *Config) SetUser(username string) error {
 }
 
 func getConfigPath() (string, error) {
-	const configFileName = ".gatorconfig.json"
+	const configFileName = ".gulpconfig.json"
 	homeDirPath, err := os.UserHomeDir() 
 	if err != nil {
 		return "", err

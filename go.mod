@@ -1,4 +1,4 @@
-module blog-aggregator
+module gulp
 
 go 1.25.0
 

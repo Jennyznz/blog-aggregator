@@ -13,8 +13,8 @@ import (
 	"errors"
 	"strconv"
 
-	"blog-aggregator/internal/config"
-	"blog-aggregator/internal/database"
+	"gulp/internal/config"
+	"gulp/internal/database"
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 )
@@ -223,7 +223,7 @@ func fetchFeed (ctx context.Context, feedURL string) (*RSSFeed, error) {
 	if err != nil {
 		return &RSSFeed{}, errors.New("error building request")
 	}
-	req.Header.Set("User-Agent", "gator")
+	req.Header.Set("User-Agent", "gulp")
 
 	// Send request.
 	client := &http.Client{}
